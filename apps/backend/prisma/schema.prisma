@@ -1,0 +1,895 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER ROLES & AUTHENTICATION
+// ============================================
+
+model User {
+  id                String    @id @default(cuid())
+  phone             String    @unique
+  email             String?   @unique
+  firstName         String?
+  lastName          String?
+  profileImage      String?
+  role              UserRole
+  isVerified        Boolean   @default(false)
+  isActive          Boolean   @default(true)
+  language          String    @default("en")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  // Relations
+  customer          Customer?
+  worker            Worker?
+  climber           Climber?
+  coordinator       VillageCoordinator?
+  otpLogs           OTPLog[]
+  devices           Device[]
+  notifications     Notification[]
+  ratings           WorkerRating[]      @relation("RatedBy")
+  reviews           WorkerRating[]      @relation("RatedWorker")
+  payments          Payment[]
+  subscriptions     Subscription[]      @relation("SubscribedBy")
+
+  @@index([phone])
+  @@index([role])
+  @@index([isActive])
+}
+
+enum UserRole {
+  CUSTOMER
+  CLIMBER
+  RURAL_WORKER
+  VILLAGE_COORDINATOR
+  ADMIN
+}
+
+model OTPLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  otp       String
+  phone     String
+  isUsed    Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([phone])
+  @@index([expiresAt])
+}
+
+model Device {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceToken  String
+  deviceType   String   // "iOS" or "Android"
+  isActive     Boolean  @default(true)
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, deviceToken])
+  @@index([userId])
+}
+
+// ============================================
+// CUSTOMER PROFILE
+// ============================================
+
+model Customer {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aadhaar         String?  @unique
+  panCard         String?  @unique
+  bankAccount     String?
+  bankName        String?
+  ifscCode        String?
+  totalSpent      Float    @default(0)
+  totalBookings   Int      @default(0)
+  averageRating   Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  properties      Property[]
+  bookings        Booking[]
+  subscriptions   Subscription[]      @relation("CustomerSubscriptions")
+  favoriteWorkers FavoriteWorker[]
+  reviews         WorkerRating[]      @relation("CustomerReviews")
+  transportJobs   TransportJob[]      @relation("CustomerTransport")
+  traderRequests  TraderRequest[]
+  landMonitoring  LandMonitoringRequest[]
+
+  @@index([userId])
+}
+
+model Property {
+  id              String   @id @default(cuid())
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  address         String
+  city            String
+  district        String
+  state           String
+  pincode         String
+  latitude        Float
+  longitude       Float
+  totalTrees      Int
+  treeType        String   // "Coconut", "Arecanut", "Rubber", etc.
+  areaInAcres     Float
+  ownershipType   String   // "Own", "Leased", "Shared"
+  image           String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  bookings        Booking[]
+  entries         PropertyEntry[]
+  harvestRecords  HarvestRecord[]
+  landMonitoring  LandMonitoringRequest[]
+  subscriptions   Subscription[]      @relation("PropertySubscriptions")
+
+  @@index([customerId])
+  @@index([district])
+  @@index([treeType])
+}
+
+model PropertyEntry {
+  id             String   @id @default(cuid())
+  propertyId     String
+  property       Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  entryType      String   // "Gate Unlocked", "Key Hidden", "Neighbour", "Caretaker"
+  instructions   String
+  keyLocation    String?
+  neighborName   String?
+  neighborPhone  String?
+  caretakerName  String?
+  caretakerPhone String?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([propertyId])
+}
+
+// ============================================
+// WORKER PROFILES
+// ============================================
+
+model Worker {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workerType       String   // "Climber", "Shell Processor", "Collector", etc.
+  specialization   String?  // Skills
+  idType           String?  // "Aadhaar", "PAN", etc.
+  idNumber         String?  @unique
+  idProofUrl       String?  // Uploaded ID image
+  isIdVerified     Boolean  @default(false)
+  faceVerified     Boolean  @default(false)
+  faceVerifyUrl    String?
+  totalEarnings    Float    @default(0)
+  totalJobs        Int      @default(0)
+  completedJobs    Int      @default(0)
+  averageRating    Float    @default(0)
+  badge            String?  // "Verified", "Top Rated", "Machine Climber", etc.
+  bankAccount      String?
+  bankName         String?
+  ifscCode         String?
+  upiId            String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  climber          Climber?
+  availability     WorkerAvailability?
+  jobs             Job[]
+  ratings          WorkerRating[]      @relation("WorkerRatings")
+  completionPhotos CompletionPhoto[]
+  harvestRecords   HarvestRecord[]
+  equipmentRentals EquipmentRental[]
+  payments         Payment[]           @relation("WorkerPayments")
+  earnings         WorkerEarning[]
+
+  @@index([userId])
+  @@index([isVerified])
+  @@index([workerType])
+}
+
+model Climber {
+  id               String   @id @default(cuid())
+  workerId         String   @unique
+  worker           Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  experience       Int      // Years of experience
+  machineOperator  Boolean  @default(false)
+  safetyBeltOwned  Boolean  @default(false)
+  climbingRope     Boolean  @default(false)
+  serviceRadius    Int      // In kilometers
+  maxTreesPerDay   Int      @default(50)
+  certifications   String?  // JSON array of certifications
+  medicalCheckup   Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([workerId])
+}
+
+model WorkerAvailability {
+  id          String   @id @default(cuid())
+  workerId    String   @unique
+  worker      Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  monday      Boolean  @default(true)
+  tuesday     Boolean  @default(true)
+  wednesday   Boolean  @default(true)
+  thursday    Boolean  @default(true)
+  friday      Boolean  @default(true)
+  saturday    Boolean  @default(true)
+  sunday      Boolean  @default(false)
+  startTime   String   @default("06:00") // HH:mm format
+  endTime     String   @default("18:00")  // HH:mm format
+  isAvailable Boolean  @default(true)
+  blackoutDates String? // JSON array of dates
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workerId])
+}
+
+// ============================================
+// VILLAGE COORDINATOR
+// ============================================
+
+model VillageCoordinator {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  village         String
+  district        String
+  areaCode        String
+  commissionRate  Float    @default(5) // Percentage
+  totalEarnings   Float    @default(0)
+  totalBookings   Int      @default(0)
+  isApproved      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  bookings        Booking[]           @relation("CoordinatorBookings")
+  commissions     CoordinatorCommission[]
+
+  @@index([userId])
+  @@index([district])
+}
+
+model CoordinatorCommission {
+  id            String   @id @default(cuid())
+  coordinatorId String
+  coordinator   VillageCoordinator @relation(fields: [coordinatorId], references: [id], onDelete: Cascade)
+  bookingId     String
+  booking       Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount        Float
+  status        String   @default("pending") // "pending", "paid"
+  createdAt     DateTime @default(now())
+  paidAt        DateTime?
+
+  @@index([coordinatorId])
+  @@index([bookingId])
+  @@index([status])
+}
+
+// ============================================
+// SERVICES & BOOKINGS
+// ============================================
+
+model Service {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  category        String   // "Harvest", "Cleaning", "Shell Removal", etc.
+  basePrice       Float
+  unitType        String   // "per_tree", "per_job", etc.
+  estimatedTime   Int      // In minutes
+  isActive        Boolean  @default(true)
+  image           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  bookings        Booking[]           @relation("ServiceBookings")
+  addOns          AddOnService[]      @relation("ServiceAddOns")
+  pricingRules    PricingRule[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model AddOnService {
+  id              String   @id @default(cuid())
+  serviceId       String
+  service         Service  @relation("ServiceAddOns", fields: [serviceId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  price           Float
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  // Relations
+  bookings        BookingAddOn[]
+
+  @@index([serviceId])
+  @@index([isActive])
+}
+
+model Booking {
+  id                    String   @id @default(cuid())
+  customerId            String
+  customer              Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  propertyId            String
+  property              Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  coordinatorId         String?
+  coordinator           VillageCoordinator? @relation("CoordinatorBookings", fields: [coordinatorId], references: [id])
+  serviceId             String
+  service               Service  @relation("ServiceBookings", fields: [serviceId], references: [id])
+  workerId              String?
+  worker                Worker?  @relation(fields: [workerId], references: [id])
+  treeCount             Int
+  status                BookingStatus @default(PENDING)
+  serviceMode           String   // "Customer Present", "Unattended", "Subscription"
+  timeSlot              String   // "6-9", "9-12", "12-3", "3-6"
+  scheduledDate         DateTime
+  basePrice             Float
+  addOnPrice            Float    @default(0)
+  totalPrice            Float
+  discountApplied       Float    @default(0)
+  finalPrice            Float
+  paymentStatus         String   @default("pending") // "pending", "completed", "failed"
+  paymentId             String?
+  payment               Payment? @relation(fields: [paymentId], references: [id])
+  notes                 String?
+  completedAt           DateTime?
+  cancelledAt           DateTime?
+  cancellationReason    String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  // Relations
+  addOns                BookingAddOn[]
+  completionPhotos      CompletionPhoto[]
+  harvestRecord         HarvestRecord?
+  dispute               Dispute?
+  commission            CoordinatorCommission?
+  job                   Job?
+
+  @@index([customerId])
+  @@index([propertyId])
+  @@index([workerId])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([paymentStatus])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+model BookingAddOn {
+  id          String   @id @default(cuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  addOnId     String
+  addOn       AddOnService @relation(fields: [addOnId], references: [id])
+  quantity    Int      @default(1)
+  price       Float
+  createdAt   DateTime @default(now())
+
+  @@unique([bookingId, addOnId])
+  @@index([bookingId])
+}
+
+model Job {
+  id              String   @id @default(cuid())
+  bookingId       String   @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  workerId        String
+  worker          Worker   @relation(fields: [workerId], references: [id])
+  status          String   @default("assigned") // "assigned", "accepted", "in_progress", "completed", "rejected"
+  acceptedAt      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([status])
+}
+
+// ============================================
+// SUBSCRIPTIONS
+// ============================================
+
+model SubscriptionPlan {
+  id              String   @id @default(cuid())
+  name            String   // "Basic", "Standard", "Premium"
+  description     String?
+  visitsPerYear   Int
+  monthlyPrice    Float?
+  yearlyPrice     Float
+  features        String[] // JSON array of features
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  subscriptions   Subscription[]
+
+  @@unique([name])
+}
+
+model Subscription {
+  id              String   @id @default(cuid())
+  customerId      String
+  customer        Customer @relation("CustomerSubscriptions", fields: [customerId], references: [id], onDelete: Cascade)
+  propertyId      String
+  property        Property @relation("PropertySubscriptions", fields: [propertyId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  startDate       DateTime
+  endDate         DateTime
+  status          String   @default("active") // "active", "paused", "cancelled"
+  autoRenew       Boolean  @default(true)
+  visitsUsed      Int      @default(0)
+  nextVisitDate   DateTime?
+  paymentId       String?
+  payment         Payment? @relation(fields: [paymentId], references: [id])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  cancelledAt     DateTime?
+
+  // Relations
+  visits          SubscriptionVisit[]
+
+  @@index([customerId])
+  @@index([propertyId])
+  @@index([status])
+  @@index([startDate])
+}
+
+model SubscriptionVisit {
+  id              String   @id @default(cuid())
+  subscriptionId  String
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  bookingId       String?
+  scheduledDate   DateTime
+  completedDate   DateTime?
+  status          String   @default("scheduled") // "scheduled", "completed", "cancelled"
+  createdAt       DateTime @default(now())
+
+  @@index([subscriptionId])
+  @@index([scheduledDate])
+}
+
+// ============================================
+// PAYMENTS & TRANSACTIONS
+// ============================================
+
+model Payment {
+  id              String   @id @default(cuid())
+  customerId      String
+  customer        User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  workerId        String?
+  worker          Worker?  @relation("WorkerPayments", fields: [workerId], references: [id])
+  amount          Float
+  paymentMethod   String   // "UPI", "Card", "Wallet", "Cash"
+  transactionId   String?  @unique
+  status          String   @default("pending") // "pending", "success", "failed", "refunded"
+  paymentGateway  String?  // "Stripe", "Razorpay", etc.
+  gatewayResponse String?  // JSON response from gateway
+  refundAmount    Float    @default(0)
+  refundDate      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  bookings        Booking[]
+  subscriptions   Subscription[]
+  earnings        WorkerEarning?
+
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model WorkerEarning {
+  id              String   @id @default(cuid())
+  workerId        String
+  worker          Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  paymentId       String   @unique
+  payment         Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amount          Float
+  commissionRate  Float    @default(0)
+  netAmount       Float
+  status          String   @default("earned") // "earned", "pending_transfer", "transferred"
+  transferredAt   DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([workerId])
+  @@index([status])
+}
+
+// ============================================
+// RATINGS & REVIEWS
+// ============================================
+
+model WorkerRating {
+  id              String   @id @default(cuid())
+  workerId        String
+  worker          Worker   @relation("WorkerRatings", fields: [workerId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        User     @relation("RatedBy", fields: [customerId], references: [id], onDelete: Cascade)
+  ratedWorkerId   String
+  ratedWorker     User     @relation("RatedWorker", fields: [ratedWorkerId], references: [id], onDelete: Cascade)
+  rating          Int      // 1-5
+  review          String?
+  photos          String?  // JSON array of photo URLs
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([workerId, customerId])
+  @@index([workerId])
+  @@index([rating])
+}
+
+// ============================================
+// PHOTO PROOF & DOCUMENTATION
+// ============================================
+
+model CompletionPhoto {
+  id              String   @id @default(cuid())
+  bookingId       String
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  workerId        String
+  worker          Worker   @relation(fields: [workerId], references: [id])
+  photoType       String   // "before_work", "after_work", "cleaned_area", "storage", etc.
+  photoUrl        String
+  uploadedAt      DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([photoType])
+}
+
+model VerificationDocument {
+  id              String   @id @default(cuid())
+  workerId        String
+  documentType    String   // "ID", "Certificate", "Medical", etc.
+  documentUrl     String
+  isVerified      Boolean  @default(false)
+  verifiedBy      String?
+  verifiedAt      DateTime?
+  expiryDate      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workerId])
+}
+
+// ============================================
+// HARVEST & MONITORING
+// ============================================
+
+model HarvestRecord {
+  id              String   @id @default(cuid())
+  bookingId       String   @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id])
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id])
+  workerId        String
+  worker          Worker   @relation(fields: [workerId], references: [id])
+  harvestQuantity Int      // Number of coconuts
+  harvestDate     DateTime
+  treeHealth      String?  // JSON object with health metrics
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@index([customerId])
+  @@index([propertyId])
+  @@index([harvestDate])
+}
+
+model LandMonitoringRequest {
+  id              String   @id @default(cuid())
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  requestType     String   // "inspection", "monitoring", "emergency"
+  status          String   @default("pending") // "pending", "assigned", "completed"
+  description     String?
+  treePhotos      String?  // JSON array of URLs
+  boundaryPhotos  String?  // JSON array of URLs
+  statusChecklist String?  // JSON object
+  fallenCoconuts  Int      @default(0)
+  reportDate      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
+// ============================================
+// TRANSPORT & LOGISTICS
+// ============================================
+
+model TransportJob {
+  id              String   @id @default(cuid())
+  customerId      String
+  customer        Customer @relation("CustomerTransport", fields: [customerId], references: [id], onDelete: Cascade)
+  propertyId      String?
+  fromLocation    String
+  toLocation      String
+  loadType        String   // "coconut", "shells", "mixed", etc.
+  quantity        Float
+  estimatedWeight Float    // In kg
+  transportMode   String   // "truck", "auto", "bicycle", etc.
+  status          String   @default("pending") // "pending", "assigned", "in_transit", "delivered"
+  quotedPrice     Float
+  finalPrice      Float?
+  driverId        String?
+  vehicleNumber   String?
+  contactNumber   String
+  pickupDate      DateTime
+  deliveryDate    DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([pickupDate])
+}
+
+model TransportProvider {
+  id              String   @id @default(cuid())
+  name            String
+  phone           String   @unique
+  email           String?  @unique
+  address         String
+  city            String
+  district        String
+  availableVehicles String // JSON array
+  avgRating       Float    @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([district])
+  @@index([isActive])
+}
+
+// ============================================
+// TRADER MARKETPLACE
+// ============================================
+
+model TraderRequest {
+  id              String   @id @default(cuid())
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  coconutQuantity Int
+  expectedQuality String?  // "Grade A", "Grade B", etc.
+  minPrice        Float?
+  maxPrice        Float?
+  availableFrom   DateTime
+  availableUntil  DateTime
+  status          String   @default("open") // "open", "offered", "accepted", "completed", "cancelled"
+  offers          TraderOffer[]
+  acceptedOfferId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model TraderOffer {
+  id              String   @id @default(cuid())
+  requestId       String
+  request         TraderRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  traderName      String
+  traderPhone     String
+  pricePerUnit    Float
+  totalPrice      Float
+  pickupDate      DateTime?
+  notes           String?
+  status          String   @default("pending") // "pending", "accepted", "rejected"
+  createdAt       DateTime @default(now())
+
+  @@index([requestId])
+  @@index([status])
+}
+
+// ============================================
+// EQUIPMENT & RENTALS
+// ============================================
+
+model EquipmentInventory {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  category        String   // "climbing", "collection", "safety", etc.
+  dailyRent       Float
+  weeklyRent      Float?
+  monthlyRent     Float?
+  totalQuantity   Int
+  availableQty    Int
+  image           String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  rentals         EquipmentRental[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model EquipmentRental {
+  id              String   @id @default(cuid())
+  workerId        String
+  worker          Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  equipmentId     String
+  equipment       EquipmentInventory @relation(fields: [equipmentId], references: [id])
+  quantity        Int
+  rentalType      String   // "daily", "weekly", "monthly"
+  rentalPrice     Float
+  fromDate        DateTime
+  toDate          DateTime
+  status          String   @default("active") // "active", "returned", "damaged"
+  damageReport    String?
+  returnedDate    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([workerId])
+  @@index([status])
+}
+
+// ============================================
+// PRICING & RULES
+// ============================================
+
+model PricingRule {
+  id              String   @id @default(cuid())
+  serviceId       String
+  service         Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  treeCountMin    Int      @default(1)
+  treeCountMax    Int      @default(1000)
+  basePricePerTree Float
+  discountPercent Float    @default(0)
+  applyFrom       DateTime @default(now())
+  applyUntil      DateTime?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([serviceId])
+  @@index([isActive])
+}
+
+// ============================================
+// FAVORITES & PREFERENCES
+// ============================================
+
+model FavoriteWorker {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  workerId    String
+  createdAt   DateTime @default(now())
+
+  @@unique([customerId, workerId])
+  @@index([customerId])
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  message         String
+  type            String   // "booking", "payment", "review", etc.
+  data            String?  // JSON additional data
+  isRead          Boolean  @default(false)
+  readAt          DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ============================================
+// DISPUTES & SUPPORT
+// ============================================
+
+model Dispute {
+  id              String   @id @default(cuid())
+  bookingId       String   @unique
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  raisedBy        String   // "customer" or "worker"
+  reason          String
+  description     String
+  status          String   @default("open") // "open", "investigating", "resolved", "closed"
+  resolution      String?
+  resolvedBy      String?
+  resolutionDate  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([bookingId])
+  @@index([status])
+}
+
+// ============================================
+// DISTRICT COVERAGE & ANALYTICS
+// ============================================
+
+model DistrictCoverage {
+  id              String   @id @default(cuid())
+  district        String   @unique
+  state           String
+  isActive        Boolean  @default(true)
+  workerCount     Int      @default(0)
+  customerCount   Int      @default(0)
+  monthlyBookings Int      @default(0)
+  monthlyRevenue  Float    @default(0)
+  lastUpdated     DateTime @default(now())
+
+  @@index([isActive])
+}
+
+model Analytics {
+  id              String   @id @default(cuid())
+  date            DateTime @default(now())
+  totalBookings   Int      @default(0)
+  totalRevenue    Float    @default(0)
+  completedJobs   Int      @default(0)
+  cancelledJobs   Int      @default(0)
+  newCustomers    Int      @default(0)
+  newWorkers      Int      @default(0)
+  avgRating       Float    @default(0)
+
+  @@unique([date])
+  @@index([date])
+}
