@@ -47,13 +47,11 @@ npm-debug.*
 *.orig.*
 web-build/
 
-# Lock files (optional, uncomment if you want to commit them)
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
+# Lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Prisma
-.env
-.env.local
 prisma/*.db
 prisma/*.db-journal

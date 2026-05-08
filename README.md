@@ -32,7 +32,7 @@ A comprehensive cross-platform application connecting coconut tree owners with v
 - 📱 OTP-based registration
 - 🏠 Multiple property management
 - 📅 Service booking with time slots
-- 🔓 Unattended service execution
+- 🔐 Unattended service execution
 - 📸 Photo proof uploads
 - 💰 Subscription plans (Basic/Standard/Premium)
 - 🔍 Land monitoring requests
@@ -46,7 +46,7 @@ A comprehensive cross-platform application connecting coconut tree owners with v
 - ✅ ID verification system
 - 📍 Service radius configuration
 - 📅 Availability calendar management
-- 💼 Job acceptance & tracking
+- 📋 Job acceptance & tracking
 - 📷 Before/after photo uploads
 - 🌳 Tree health checklist
 - 🥥 Harvest count reporting
@@ -85,7 +85,6 @@ TreeCare/
 │   │   │   ├── utils/
 │   │   │   └── index.ts
 │   │   ├── prisma/
-│   │   │   └── schema.prisma
 │   │   └── package.json
 │   ├── mobile/
 │   │   ├── src/
@@ -107,7 +106,8 @@ TreeCare/
 ├── packages/
 │   ├── shared-types/
 │   └── shared-utils/
-└── docker-compose.yml
+├── docker-compose.yml
+└── README.md
 ```
 
 ## 🚀 Getting Started
@@ -196,14 +196,6 @@ Architecture supports adding:
 - AI tree health detection
 - Yield prediction
 - Weather alert integration
-
-## 📋 Environment Variables
-
-See `.env.example` files in each app directory for required variables.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please follow the guidelines in CONTRIBUTING.md
 
 ## 📝 License
 
